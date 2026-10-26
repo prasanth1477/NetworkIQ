@@ -3,3 +3,4 @@ Flask
 networkx
 pandas
 matplotlib
+gunicorn
