@@ -1,0 +1,542 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Neuro? | Influential Node Detection</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+
+<body class="dashboard-body">
+
+<div class="dashboard-layout">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-icon">N</div>
+            <div>
+                <h2>NetworkIQ</h2>
+                <p>Social Analytics</p>
+            </div>
+        </div>
+
+        <p class="sidebar-label">WORKSPACE</p>
+
+        <nav class="sidebar-nav">
+            <a href="#overview" class="nav-link active">
+                <span>▦</span> Dashboard
+            </a>
+            <a href="#upload" class="nav-link">
+                <span>↑</span> Upload Dataset
+            </a>
+            <a href="#network" class="nav-link">
+                <span>◎</span> Network Graph
+            </a>
+            <a href="#rankings" class="nav-link">
+                <span>↗</span> Centrality Rankings
+            </a>
+            <a href="#results" class="nav-link">
+                <span>▤</span> Results Table
+            </a>
+        </nav>
+
+        <div class="sidebar-bottom">
+            <div class="sidebar-status">
+                <span class="status-dot"></span>
+                Analysis Engine
+                <strong>Ready</strong>
+            </div>
+            <p>Influential Node Detection</p>
+            <p class="sidebar-version">Social Network Analysis</p>
+        </div>
+    </aside>
+
+    <!-- Main Dashboard -->
+    <main class="dashboard-main">
+
+        <header class="topbar">
+            <div>
+                <p class="breadcrumb">Workspace / Analytics</p>
+                <h1>Network Analytics Dashboard</h1>
+                <p class="topbar-subtitle">
+                    Discover important nodes and understand network connections.
+                </p>
+            </div>
+
+            <div class="topbar-badge">
+                <span class="status-dot"></span>
+                Analysis Workspace
+            </div>
+        </header>
+
+        <!-- Error -->
+        {% if error %}
+        <div class="error" role="alert">
+            <strong>Analysis Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Upload Dataset -->
+        <section class="panel upload-panel" id="upload">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">DATA SOURCE</p>
+                    <h2>Upload Network Dataset</h2>
+                    <p>
+                        Upload a CSV file containing Source and Target columns.
+                    </p>
+                </div>
+            </div>
+
+            <form method="POST"
+                  action="{{ url_for('home') }}"
+                  enctype="multipart/form-data"
+                  class="upload-form">
+
+                <div class="file-input-wrapper">
+                    <label for="dataset">Choose your CSV file</label>
+                    <input
+                        type="file"
+                        id="dataset"
+                        name="dataset"
+                        accept=".csv,text/csv"
+                        required
+                    >
+                    <small>CSV format · Maximum file size 5 MB</small>
+                </div>
+
+                <button type="submit" class="primary-button">
+                    Analyze Network <span>→</span>
+                </button>
+            </form>
+
+            {% if uploaded_filename and not error %}
+            <p class="success" role="status">
+                Analysis completed. Dataset: <strong>{{ uploaded_filename }}</strong>
+            </p>
+            {% elif not uploaded_filename and not error %}
+            <p class="note">
+                Showing the default sample dataset.
+            </p>
+            {% endif %}
+        </section>
+
+        {% if results and not error %}
+
+        <!-- Overview -->
+        <section id="overview" class="dashboard-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">AT A GLANCE</p>
+                    <h2>Network Overview</h2>
+                </div>
+                <span class="live-label">
+                    <span class="status-dot"></span> Results Available
+                </span>
+            </div>
+
+            <div class="stats">
+                <article class="stat-card metric-card">
+                    <div class="metric-top">
+                        <span class="metric-icon blue-icon">◎</span>
+                        <span class="metric-caption">NETWORK</span>
+                    </div>
+                    <h3>{{ node_count }}</h3>
+                    <p>Total Nodes</p>
+                    <small>Unique entities in the network</small>
+                </article>
+
+                <article class="stat-card metric-card">
+                    <div class="metric-top">
+                        <span class="metric-icon purple-icon">↔</span>
+                        <span class="metric-caption">CONNECTIONS</span>
+                    </div>
+                    <h3>{{ edge_count }}</h3>
+                    <p>Total Connections</p>
+                    <small>Relationships between nodes</small>
+                </article>
+
+                <article class="stat-card metric-card highlight-card">
+                    <div class="metric-top">
+                        <span class="metric-icon gold-icon">★</span>
+                        <span class="metric-caption">TOP RANKED</span>
+                    </div>
+                    <h3>{{ top_node }}</h3>
+                    <p>Most Influential Node</p>
+                    <small>By {{ selected_measure_label }}</small>
+                </article>
+
+                <article class="stat-card metric-card">
+                    <div class="metric-top">
+                        <span class="metric-icon green-icon">↗</span>
+                        <span class="metric-caption">CENTRALITY</span>
+                    </div>
+                    <h3>{{ "%.4f"|format(top_score|float) }}</h3>
+                    <p>Highest Score</p>
+                    <small>{{ selected_measure_label }}</small>
+                </article>
+            </div>
+        </section>
+
+        <!-- Interactive Network -->
+        <section id="network" class="panel dashboard-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">NETWORK EXPLORER</p>
+                    <h2>Social Network Visualization</h2>
+                    <p>Explore relationships between nodes.</p>
+                </div>
+                <span class="panel-tag">Interactive Graph</span>
+            </div>
+
+            <div class="graph-container interactive-graph-container">
+                <div id="interactiveNetwork"
+                     class="interactive-network"
+                     role="img"
+                     aria-label="Interactive social network graph"></div>
+
+                <p id="graphFallback" class="note" hidden>
+                    Interactive graph data is not available yet.
+                    The static network graph is shown below when available.
+                </p>
+
+                {% if graph_file %}
+                <img
+                    src="{{ url_for('static', filename=graph_file) }}"
+                    alt="Static social network graph"
+                    class="network-graph graph-fallback-image"
+                    id="staticNetworkImage"
+                >
+                {% endif %}
+            </div>
+
+            <p class="note">
+                Select a node to explore its connections. Drag nodes to reposition
+                them and use the mouse wheel to zoom.
+            </p>
+        </section>
+
+        <!-- Centrality Ranking -->
+        <section id="rankings" class="panel dashboard-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">NODE IMPORTANCE</p>
+                    <h2>Centrality Rankings</h2>
+                    <p>Choose a measure to update the rankings and score chart.</p>
+                </div>
+            </div>
+
+            <form method="GET"
+                  action="{{ url_for('home') }}"
+                  class="ranking-form">
+
+                <input type="hidden"
+                       name="uploaded_file"
+                       value="{{ uploaded_file or '' }}">
+
+                <label for="measure">Centrality Measure</label>
+
+                <select name="measure"
+                        id="measure"
+                        onchange="this.form.submit()">
+
+                    {% for key, label in centrality_options.items() %}
+                    <option value="{{ key }}"
+                        {% if selected_measure == key %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                <noscript>
+                    <button type="submit" class="primary-button">
+                        Apply Ranking
+                    </button>
+                </noscript>
+            </form>
+
+            <div class="ranking-highlight">
+                <span class="ranking-number">#1</span>
+                <div>
+                    <p>Highest-ranked node</p>
+                    <h3>{{ top_node }}</h3>
+                    <small>
+                        {{ selected_measure_label }}:
+                        {{ "%.4f"|format(top_score|float) }}
+                    </small>
+                </div>
+            </div>
+
+            <p class="note">
+                Centrality measures describe structural importance, not
+                necessarily real-world influence.
+            </p>
+        </section>
+
+        <!-- Chart -->
+        <section class="panel dashboard-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">SCORE COMPARISON</p>
+                    <h2>Centrality Comparison Chart</h2>
+                    <p>{{ selected_measure_label }} for each node.</p>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <canvas id="centralityChart"
+                        role="img"
+                        aria-label="Bar chart comparing centrality scores"></canvas>
+            </div>
+        </section>
+
+        <!-- Results Table -->
+        <section id="results" class="panel dashboard-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">DETAILED ANALYSIS</p>
+                    <h2>Centrality Results</h2>
+                    <p>Ranked by {{ selected_measure_label }}.</p>
+                </div>
+
+                <a href="{{ url_for(
+                    'download_results',
+                    uploaded_file=uploaded_file,
+                    measure=selected_measure
+                ) }}" class="download-button">
+                    ↓ Download CSV
+                </a>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Node</th>
+                            <th>Degree</th>
+                            <th>Betweenness</th>
+                            <th>Closeness</th>
+                            <th>Eigenvector</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in results %}
+                        <tr>
+                            <td>
+                                <span class="rank-badge">{{ loop.index }}</span>
+                            </td>
+                            <td><strong>{{ row.Node }}</strong></td>
+                            <td>{{ "%.4f"|format(row.Degree|float) }}</td>
+                            <td>{{ "%.4f"|format(row.Betweenness|float) }}</td>
+                            <td>{{ "%.4f"|format(row.Closeness|float) }}</td>
+                            <td>{{ "%.4f"|format(row.Eigenvector|float) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Explanations -->
+        <section class="panel dashboard-section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">LEARN THE METRICS</p>
+                    <h2>Understanding Centrality</h2>
+                </div>
+            </div>
+
+            <div class="explanation-grid">
+                <article class="explanation-card">
+                    <h3>Degree Centrality</h3>
+                    <p>Measures the number of direct connections a node has.</p>
+                </article>
+                <article class="explanation-card">
+                    <h3>Betweenness Centrality</h3>
+                    <p>Measures how often a node lies on shortest paths between other nodes.</p>
+                </article>
+                <article class="explanation-card">
+                    <h3>Closeness Centrality</h3>
+                    <p>Measures how close a node is to other reachable nodes.</p>
+                </article>
+                <article class="explanation-card">
+                    <h3>Eigenvector Centrality</h3>
+                    <p>Gives importance to nodes connected to other important nodes.</p>
+                </article>
+            </div>
+
+            <p class="note">
+                Centrality values should be interpreted in the context of the
+                network and the selected measure.
+            </p>
+        </section>
+
+        <!-- Chart Data -->
+        <script>
+            const nodeLabels = {{ results | map(attribute='Node') | list | tojson }};
+
+            const centralityData = {
+                Degree: {{ results | map(attribute='Degree') | list | tojson }},
+                Betweenness: {{ results | map(attribute='Betweenness') | list | tojson }},
+                Closeness: {{ results | map(attribute='Closeness') | list | tojson }},
+                Eigenvector: {{ results | map(attribute='Eigenvector') | list | tojson }}
+            };
+
+            const selectedMeasure = {{ selected_measure | tojson }};
+
+            const measureLabels = {
+                Degree: "Degree Centrality",
+                Betweenness: "Betweenness Centrality",
+                Closeness: "Closeness Centrality",
+                Eigenvector: "Eigenvector Centrality"
+            };
+
+            const chartCanvas = document.getElementById("centralityChart");
+
+            if (chartCanvas && typeof Chart !== "undefined") {
+                new Chart(chartCanvas.getContext("2d"), {
+                    type: "bar",
+                    data: {
+                        labels: nodeLabels,
+                        datasets: [{
+                            label: measureLabels[selectedMeasure],
+                            data: centralityData[selectedMeasure],
+                            backgroundColor: "rgba(59, 130, 246, 0.78)",
+                            hoverBackgroundColor: "rgba(37, 99, 235, 0.95)",
+                            borderColor: "#2563eb",
+                            borderWidth: 1,
+                            borderRadius: 6,
+                            maxBarThickness: 48
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: true, position: "top" },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return context.dataset.label + ": " +
+                                            Number(context.parsed.y).toFixed(4);
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 1,
+                                title: { display: true, text: "Centrality Score" },
+                                ticks: { stepSize: 0.2 },
+                                grid: { color: "#e9eef6" }
+                            },
+                            x: {
+                                title: { display: true, text: "Network Nodes" },
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Interactive graph data will be provided by app.py.
+            const graphData = {{ graph_data | default(none) | tojson }};
+
+            const graphElement = document.getElementById("interactiveNetwork");
+            const fallbackMessage = document.getElementById("graphFallback");
+            const staticImage = document.getElementById("staticNetworkImage");
+
+            if (
+                graphElement &&
+                typeof vis !== "undefined" &&
+                graphData &&
+                Array.isArray(graphData.nodes) &&
+                Array.isArray(graphData.edges) &&
+                graphData.nodes.length > 0
+            ) {
+                const nodes = new vis.DataSet(graphData.nodes);
+                const edges = new vis.DataSet(graphData.edges);
+
+                const network = new vis.Network(
+                    graphElement,
+                    { nodes: nodes, edges: edges },
+                    {
+                        autoResize: true,
+                        interaction: {
+                            hover: true,
+                            navigationButtons: true,
+                            keyboard: true
+                        },
+                        physics: {
+                            stabilization: { iterations: 150 },
+                            barnesHut: {
+                                gravitationalConstant: -2500,
+                                springLength: 120
+                            }
+                        },
+                        nodes: {
+                            shape: "dot",
+                            size: 20,
+                            font: {
+                                size: 15,
+                                color: "#172554",
+                                face: "Arial"
+                            },
+                            borderWidth: 2,
+                            color: {
+                                background: "#93c5fd",
+                                border: "#2563eb",
+                                highlight: {
+                                    background: "#fbbf24",
+                                    border: "#d97706"
+                                }
+                            }
+                        },
+                        edges: {
+                            color: { color: "#94a3b8", highlight: "#2563eb" },
+                            width: 1.5,
+                            smooth: { type: "continuous" }
+                        }
+                    }
+                );
+
+                if (staticImage) staticImage.hidden = true;
+                if (fallbackMessage) fallbackMessage.hidden = true;
+
+                network.on("selectNode", function(params) {
+                    const selectedId = params.nodes[0];
+                    const selectedNode = nodes.get(selectedId);
+
+                    if (selectedNode) {
+                        graphElement.title =
+                            "Selected node: " + selectedNode.label;
+                    }
+                });
+            } else {
+                if (graphElement) graphElement.hidden = true;
+                if (fallbackMessage) fallbackMessage.hidden = false;
+            }
+        </script>
+
+        {% endif %}
+
+        <footer class="dashboard-footer">
+            <p>Influential Node Detection · Social Network Analysis</p>
+            <p>Centrality-based insights for network exploration</p>
+        </footer>
+
+    </main>
+</div>
+
+</body>
+</html>
